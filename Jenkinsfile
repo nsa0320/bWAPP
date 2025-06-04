@@ -19,26 +19,26 @@ pipeline {
             }
         }
 
-        stage('Semgrep Cloud API Scan') {
-            steps {
-                script {
-                    def archiveName = "semgrep-src.tar.gz"
+       stage('Semgrep Cloud API Scan') {
+    steps {
+        script {
+            def archiveName = "semgrep-src.tar.gz"
 
-                    sh """
-                        echo "[📦] 코드 압축 중..."
-                        tar --exclude='.git' --exclude='target' -czf ${archiveName} .
+            sh """
+                echo "[📦] 코드 압축 중..."
+                # archiveName 자신을 압축 대상에서 제외합니다.
+                tar --exclude='.git' --exclude='target' --exclude="${archiveName}" -czf ${archiveName} .
 
-                        echo "[🔐] Semgrep Cloud API 호출..."
-                        curl -X POST https://semgrep.dev/api/v1/scans \
-                          -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
-                          -F "scan=@${archiveName}" > semgrep-api-response.json
+                echo "[🔐] Semgrep Cloud API 호출..."
+                curl -X POST https://semgrep.dev/api/v1/scans \
+                  -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
+                  -F "scan=@${archiveName}" > semgrep-api-response.json
 
-                        echo "[📄] 응답 저장 완료: semgrep-api-response.json"
-                    """
-                }
-            }
+                echo "[📄] 응답 저장 완료: semgrep-api-response.json"
+            """
         }
-
+    }
+}
 
         stage('Build Docker Image') {
             steps {
