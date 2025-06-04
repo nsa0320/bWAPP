@@ -34,9 +34,9 @@ pipeline {
                         export TOKEN=\$SEMGREP_APP_TOKEN
                         curl -X POST https://semgrep.dev/api/v1/scans \\
                           -H "Authorization: Bearer \$TOKEN" \\
-                          -F "scan=@${archiveName}" > semgrep-api-response.json
+                          -F "scan=@${archiveName}" > semgrep-result.json
 
-                        echo "[📄] 응답 저장 완료: semgrep-api-response.json"
+                        echo "[📄] 응답 저장 완료: semgrep-result.json"
                     """
                 }
             }
@@ -46,7 +46,7 @@ pipeline {
             steps {
                 sh '''
                     echo "[📄] HTML 리포트 생성 중..."
-                    python3 create_semgrep_report.py semgrep-api-response.json
+                    python3 create_semgrep_report.py semgrep-result.json
                 '''
             }
         }
