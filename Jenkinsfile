@@ -5,73 +5,82 @@ pipeline {
         AWS_REGION = 'ap-northeast-2'
         AWS_ACCESS_KEY_ID = credentials('ecr-login')
         AWS_SECRET_ACCESS_KEY = credentials('ecr-login')
-        ECR_REGISTRY = '341162387145.dkr.ecr.ap-northeast-2.amazonaws.com'
-        APP_REPO_NAME = 'nsa'
-        SEMGREP_API_TOKEN = 'de92eecd94c6ceb9b4d6abb49b684e28a3717011b567b4bc58f3dd572770760b'
+        S3_BUCKET = 'webgoat-nsa'
     }
 
     stages {
         stage('Checkout') {
             steps {
+                deleteDir()
                 git branch: 'develop',
                     url: 'https://github.com/nsa0320/bWAPP.git',
                     credentialsId: '1'
             }
         }
 
-     stage('Semgrep Cloud API Scan') {
-    steps {
-        script {
-            def archiveName = "semgrep-src.tar.gz"
-
-            sh """
-                echo "[📦] 코드 압축 중..."
-                # archiveName 자신을 압축 대상에서 제외합니다.
-                tar --exclude='.git' --exclude='target' --exclude="${archiveName}" -czf ${archiveName} .
-
-                echo "[🔐] Semgrep Cloud API 호출..."
-               curl -X POST https://semgrep.dev/api/v1/scan \
-               -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
-               -F "file=@${archiveName}" \
-               -F "config=auto" > semgrep-api-response.json
-
-                echo "[📄] 응답 저장 완료: semgrep-api-response.json"
-            """
-        }
-    }
-}
-
-        stage('Build Docker Image') {
+        stage('Semgrep Analysis via Lambda') {
             steps {
-                sh 'docker build --force-rm -t $ECR_REGISTRY/$APP_REPO_NAME:latest .'
+                script {
+                    def START = System.currentTimeMillis()
+
+                    sh '''
+                        echo "[📦] 소스코드 압축 중..."
+                        zip -r source.zip . -x "*.git*" "*.idea*" "target/*"
+
+                        echo "[☁️] S3에 업로드 중..."
+                        aws s3 cp source.zip s3://$S3_BUCKET/source.zip
+
+                        echo "[🚀] Lambda로 Semgrep 실행 요청 중..."
+                        aws lambda invoke \
+                          --function-name trigger-semgrep-analysis-ssm \
+                          --payload '{"s3_key":"source.zip"}' \
+                          --region $AWS_REGION \
+                          --cli-binary-format raw-in-base64-out \
+                          lambda_output.json
+
+                        echo "[📄] Lambda 응답 내용:"
+                        cat lambda_output.json
+                    '''
+
+                    def END = System.currentTimeMillis()
+                    def durationSeconds = (END - START) / 1000.0
+                    echo "⏱️ Semgrep 분석 총 소요 시간: ${durationSeconds}초"
+                }
             }
         }
 
-        stage('Login to ECR') {
+        stage('Download and Visualize Semgrep Result') {
             steps {
                 sh '''
-                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+                    echo "[📥] S3에서 Semgrep 결과 다운로드..."
+                    aws s3 cp s3://$S3_BUCKET/semgrep-result.json semgrep-result.json
+
+                    echo "[📄] HTML 리포트 생성 중..."
+                    python3 create_semgrep_report.py
                 '''
             }
         }
 
-        stage('Push to ECR') {
+        stage('Publish Semgrep Report') {
             steps {
-                sh 'docker push $ECR_REGISTRY/$APP_REPO_NAME:latest'
+                publishHTML([
+                    reportDir: '.', 
+                    reportFiles: 'semgrep-report.html', 
+                    reportName: 'Semgrep 분석 리포트',
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: false
+                ])
             }
         }
     }
 
     post {
-        always {
-            echo '🧹 Docker 이미지 정리 중...'
-            sh 'docker image prune -af || true'
-        }
         success {
-            echo '✅ 파이프라인 성공!'
+            echo '✅ Semgrep 리포트 생성 완료!'
         }
         failure {
-            echo '❌ 파이프라인 실패. 로그 확인 필요!'
+            echo '❌ 실패! 로그 확인 필요.'
         }
     }
 }
