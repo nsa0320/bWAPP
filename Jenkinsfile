@@ -30,9 +30,10 @@ pipeline {
                 tar --exclude='.git' --exclude='target' --exclude="${archiveName}" -czf ${archiveName} .
 
                 echo "[🔐] Semgrep Cloud API 호출..."
-                curl -X POST https://semgrep.dev/api/v1/scans \
-                  -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
-                  -F "scan=@${archiveName}" > semgrep-api-response.json
+               curl -X POST https://semgrep.dev/api/v1/scan \
+               -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
+               -F "file=@${archiveName}" \
+               -F "config=auto" > semgrep-api-response.json
 
                 echo "[📄] 응답 저장 완료: semgrep-api-response.json"
             """
