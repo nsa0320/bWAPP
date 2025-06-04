@@ -19,41 +19,26 @@ pipeline {
             }
         }
 
-        stage('Semgrep Cloud API Scan') {
-            steps {
-                script {
-                    def archiveName = "semgrep-src.tar.gz"
-                    def tempDir = "/tmp/semgrep-src"
+     stage('Semgrep Cloud API Scan') {
+    steps {
+        script {
+            def archiveName = "semgrep-src.tar.gz"
 
-                    sh """
-                        echo "[📁] 코드 임시 복사..."
-                        rm -rf ${tempDir}
-                        mkdir -p ${tempDir}
-                        cp -r . ${tempDir} || true
+            sh """
+                echo "[📦] 코드 압축 중..."
+                # archiveName 자신을 압축 대상에서 제외합니다.
+                tar --exclude='.git' --exclude='target' --exclude="${archiveName}" -czf ${archiveName} .
 
-                        echo "[📦] 압축 생성 중..."
-                        tar --exclude='.git' --exclude='target' --exclude='uploads' --exclude='logs' --exclude="${archiveName}" -czf ${archiveName} -C ${tempDir} .
+                echo "[🔐] Semgrep Cloud API 호출..."
+                curl -X POST https://semgrep.dev/api/v1/scans \
+                  -H "Authorization: Bearer $SEMGREP_API_TOKEN" \
+                  -F "scan=@${archiveName}" > semgrep-api-response.json
 
-                        echo "[🔐] Semgrep Cloud API 요청..."
-                        curl -s -X POST https://semgrep.dev/api/v1/scans \\
-                          -H "Authorization: Bearer $SEMGREP_API_TOKEN" \\
-                          -F "scan=@${archiveName}" > semgrep-api-response.json || echo '{ "error": "upload_failed" }' > semgrep-api-response.json
-
-                        echo "[📄] API 응답:"
-                        cat semgrep-api-response.json
-                    """
-
-                    // scan_id 추출해서 보기 좋게 출력
-                    def result = readJSON file: 'semgrep-api-response.json'
-                    if (result.scan_id) {
-                        echo "✅ Semgrep Scan ID: ${result.scan_id}"
-                        echo "🔎 확인 링크: https://semgrep.dev/scans/${result.scan_id}"
-                    } else {
-                        error("❌ Semgrep 분석 요청 실패! 응답 확인 필요.")
-                    }
-                }
-            }
+                echo "[📄] 응답 저장 완료: semgrep-api-response.json"
+            """
         }
+    }
+}
 
         stage('Build Docker Image') {
             steps {
