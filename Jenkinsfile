@@ -46,21 +46,6 @@ pipeline {
             }
         }
 
-        stage('Login to ECR') {
-            steps {
-                sh '''
-                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-                '''
-            }
-        }
-
-        stage('Push to ECR') {
-            steps {
-                sh 'docker push $ECR_REGISTRY/$APP_REPO_NAME:latest'
-            }
-        }
-    }
-
     post {
         always {
             echo '🧹 Docker 이미지 정리 중...'
