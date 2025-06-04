@@ -14,7 +14,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'develop',
-                    url: 'https://github.com/nsa0320/WebGoat-file.git',
+                    url: 'https://github.com/nsa0320/bWAPP.git',
                     credentialsId: '1'
             }
         }
