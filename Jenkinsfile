@@ -2,10 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-northeast-2'
-        AWS_ACCESS_KEY_ID = credentials('ecr-login')
-        AWS_SECRET_ACCESS_KEY = credentials('ecr-login')
-        S3_BUCKET = 'webgoat-nsa'
+        SEMGREP_APP_TOKEN = credentials('SEMGREP_APP_TOKEN')
+        ARCHIVE_NAME = "semgrep-src.tar.gz"
     }
 
     stages {
@@ -18,28 +16,21 @@ pipeline {
             }
         }
 
-        stage('Semgrep Analysis via Lambda') {
+        stage('Semgrep Cloud API Scan') {
             steps {
                 script {
                     def START = System.currentTimeMillis()
 
                     sh '''
-                        echo "[📦] 소스코드 압축 중..."
-                        zip -r source.zip . -x "*.git*" "*.idea*" "target/*"
+                        echo "[📦] 코드 압축 중..."
+                        tar --exclude='.git' --exclude='target' -czf ${ARCHIVE_NAME} .
 
-                        echo "[☁️] S3에 업로드 중..."
-                        aws s3 cp source.zip s3://$S3_BUCKET/source.zip
+                        echo "[🔐] Semgrep Cloud API 호출..."
+                        curl -X POST https://semgrep.dev/api/v1/scans \
+                          -H "Authorization: Bearer $SEMGREP_APP_TOKEN" \
+                          -F "scan=@${ARCHIVE_NAME}" > semgrep-api-response.json
 
-                        echo "[🚀] Lambda로 Semgrep 실행 요청 중..."
-                        aws lambda invoke \
-                          --function-name trigger-semgrep-analysis-ssm \
-                          --payload '{"s3_key":"source.zip"}' \
-                          --region $AWS_REGION \
-                          --cli-binary-format raw-in-base64-out \
-                          lambda_output.json
-
-                        echo "[📄] Lambda 응답 내용:"
-                        cat lambda_output.json
+                        echo "[📄] Semgrep 응답 저장 완료: semgrep-api-response.json"
                     '''
 
                     def END = System.currentTimeMillis()
@@ -49,14 +40,11 @@ pipeline {
             }
         }
 
-        stage('Download and Visualize Semgrep Result') {
+        stage('Visualize Semgrep Result') {
             steps {
                 sh '''
-                    echo "[📥] S3에서 Semgrep 결과 다운로드..."
-                    aws s3 cp s3://$S3_BUCKET/semgrep-result.json semgrep-result.json
-
                     echo "[📄] HTML 리포트 생성 중..."
-                    python3 create_semgrep_report.py
+                    python3 create_semgrep_report.py semgrep-api-response.json
                 '''
             }
         }
