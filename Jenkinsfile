@@ -26,7 +26,7 @@ pipeline {
 
                     sh """
                         echo "[📦] 코드 압축 중..."
-                        tar --exclude='.git' --exclude='target' -czf ${archiveName} .
+                        tar --exclude='.git' --exclude='target' --warning=no-file-changed -czf ${archiveName} .
 
                         echo "[🔐] Semgrep Cloud API 호출..."
                         curl -X POST https://semgrep.dev/api/v1/scans \
@@ -38,7 +38,6 @@ pipeline {
                 }
             }
         }
-
 
         stage('Build Docker Image') {
             steps {
