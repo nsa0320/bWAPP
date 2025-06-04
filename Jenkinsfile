@@ -17,13 +17,19 @@ pipeline {
         }
 
                 stage('Semgrep Cloud API Scan') {
+   stage('Semgrep Cloud API Scan') {
     steps {
         script {
             def archiveName = "semgrep-src.tar.gz"
 
             sh """
+                echo "[📦] 임시 디렉토리 생성 및 코드 복사..."
+                mkdir tmp-src
+                rsync -a --exclude='.git' --exclude='target' --exclude='${archiveName}' ./ tmp-src/
+
                 echo "[📦] 코드 압축 중..."
-                tar --exclude='.git' --exclude='target' --exclude="${archiveName}" --warning=no-file-changed -czf ${archiveName} .
+                tar -czf ${archiveName} -C tmp-src . || true
+                rm -rf tmp-src
 
                 echo "[🔐] Semgrep Cloud API 호출..."
                 export TOKEN=\$SEMGREP_APP_TOKEN
@@ -36,7 +42,6 @@ pipeline {
         }
     }
 }
-
         stage('Visualize Semgrep Result') {
             steps {
                 sh '''
